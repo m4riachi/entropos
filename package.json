@@ -14,7 +14,8 @@
     "test": "node ace test",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "typecheck": "tsc --noEmit && vue-tsc --noEmit --project inertia/tsconfig.json"
+    "typecheck": "tsc --noEmit && vue-tsc --noEmit --project inertia/tsconfig.json",
+    "predeploy": "node build/ace.js migration:run --force && node build/ace.js app:bootstrap"
   },
   "imports": {
     "#controllers/*": "./app/controllers/*.js",

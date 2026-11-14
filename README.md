@@ -62,12 +62,23 @@ production, en utilisant son URL publique :
 DATABASE_URL="<DATABASE_PUBLIC_URL de Railway>" node ace import:excel "FICHE D'ENTRE ….xlsx" --fiche="FICHE D'entree ….xlsx"
 ```
 
+### Sans accès shell au serveur
+
+Avant chaque déploiement, `npm run predeploy` lance les migrations puis
+`app:bootstrap`. Cette commande lit des variables d'environnement facultatives :
+
+- `ADMIN_EMAIL` + `ADMIN_PASSWORD` : crée ce compte s'il n'existe pas (un compte
+  existant n'est jamais modifié). Supprimez `ADMIN_PASSWORD` une fois le compte créé.
+- `IMPORT_ORIGINE_B64` (+ `IMPORT_FICHE_B64`) : contenu des classeurs Excel en base64
+  (éventuellement gzippé). Ils sont importés avec les mêmes règles que `import:excel`.
+  Supprimez ces variables une fois l'import fait.
+
 ## Déploiement (Railway)
 
 `railway.json` définit les commandes :
 
 - build : `npm run build`
-- pré-déploiement : `node build/ace.js migration:run --force`
+- pré-déploiement : `npm run predeploy` (migrations, puis `app:bootstrap`)
 - démarrage : `node build/bin/server.js`
 
 Variables d'environnement du service :

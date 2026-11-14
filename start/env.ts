@@ -27,4 +27,10 @@ export default await Env.create(new URL('../', import.meta.url), {
   // Database
   DATABASE_URL: Env.schema.string(),
   DB_SSL: Env.schema.boolean.optional(),
+
+  // One-off setup at deploy time (see commands/app_bootstrap.ts)
+  ADMIN_EMAIL: Env.schema.string.optional(),
+  ADMIN_PASSWORD: Env.schema.string.optional(),
+  IMPORT_ORIGINE_B64: Env.schema.string.optional(),
+  IMPORT_FICHE_B64: Env.schema.string.optional(),
 })
