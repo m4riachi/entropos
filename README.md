@@ -75,11 +75,12 @@ Avant chaque déploiement, `npm run predeploy` lance les migrations puis
 
 ## Déploiement (Railway)
 
-`railway.json` définit les commandes :
+Réglages du service (Settings → Deploy) :
 
 - build : `npm run build`
 - pré-déploiement : `npm run predeploy` (migrations, puis `app:bootstrap`)
 - démarrage : `node build/bin/server.js`
+- healthcheck : `/login`
 
 Variables d'environnement du service :
 
