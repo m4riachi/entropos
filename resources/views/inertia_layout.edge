@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="{{ request.plainCookie('app_theme', { defaultValue: 'light', encoded: false }) }}">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title data-inertia>
+      Entropos
+    </title>
+
+    @vite(['inertia/app.ts'])
+    @inertiaHead()
+    @stack('dumper')
+  </head>
+
+  <body>
+    @inertia()
+  </body>
+
+</html>
