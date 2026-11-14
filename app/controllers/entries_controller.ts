@@ -4,6 +4,7 @@ import { entryFormData } from '#services/entry_form_data'
 import { entryListValidator, entryValidator } from '#validators/entry'
 import {
   ENTREPOTS,
+  NUMERO_ORDRE_NUMERIC_SQL,
   SEARCH_COLUMNS,
   SORTABLE_COLUMNS,
   STATUTS,
@@ -67,7 +68,16 @@ export default class EntriesController {
     for (const expression of SORTABLE_COLUMNS[sort]) {
       query.orderByRaw(`${expression} ${order === 'asc' ? 'ASC' : 'DESC'} NULLS LAST`)
     }
-    query.orderBy('id', 'desc')
+    /**
+     * Tie-breakers: newest day first, then within a day by entrepôt and
+     * N° ordre, so a day reads in the same order as the paper sheets.
+     */
+    if (sort !== 'dateReception') query.orderByRaw('date_reception DESC NULLS LAST')
+    if (sort !== 'entrepot') query.orderByRaw('entrepot ASC NULLS LAST')
+    if (sort !== 'numeroOrdre') {
+      query.orderByRaw(`${NUMERO_ORDRE_NUMERIC_SQL} ASC NULLS LAST`).orderBy('numero_ordre', 'asc')
+    }
+    query.orderBy('id', 'asc')
 
     const paginator = await query.paginate(filters.page ?? 1, PER_PAGE)
 
