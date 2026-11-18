@@ -123,6 +123,11 @@ export default defineConfig({
       pattern: 'public/**',
       reloadServer: false,
     },
+    {
+      // Letterhead images drawn on top of every Excel export.
+      pattern: 'resources/letterhead/**',
+      reloadServer: false,
+    },
   ],
 
   hooks: {

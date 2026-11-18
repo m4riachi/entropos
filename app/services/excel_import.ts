@@ -251,8 +251,25 @@ export async function importOrigineWorkbook(
     if (!match) continue
     const entrepot = Number(match[1])
 
+    /**
+     * The header row is row 1 in the original workbook, and comes after
+     * the letterhead in the app's own "Registre" export: take the first
+     * row (of the first 20) that has a "N° ORDRE" header.
+     */
+    let headerRowNumber = 1
+    for (let r = 1; r <= Math.min(20, ws.rowCount); r++) {
+      let found = false
+      ws.getRow(r).eachCell((cell) => {
+        if (normalise(String(plain(cell.value) ?? '')) === 'n° ordre') found = true
+      })
+      if (found) {
+        headerRowNumber = r
+        break
+      }
+    }
+
     const columns = new Map<number, Column>()
-    ws.getRow(1).eachCell((cell, col) => {
+    ws.getRow(headerRowNumber).eachCell((cell, col) => {
       const header = normalise(String(plain(cell.value) ?? ''))
       const hit = HEADERS.find(([prefix]) => header.startsWith(prefix))
       if (hit && ![...columns.values()].includes(hit[1])) columns.set(col, hit[1])
@@ -262,7 +279,7 @@ export async function importOrigineWorkbook(
     let skipped = 0
 
     ws.eachRow((row, rowNumber) => {
-      if (rowNumber === 1) return
+      if (rowNumber <= headerRowNumber) return
       const cells = new Map<Column, ExcelJS.CellValue>()
       let hasFormula = false
       let hasValue = false

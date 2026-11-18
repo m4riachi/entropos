@@ -1,5 +1,7 @@
+import { readFile } from 'node:fs/promises'
 import ExcelJS from 'exceljs'
 import type { DateTime } from 'luxon'
+import app from '@adonisjs/core/services/app'
 import db from '@adonisjs/lucid/services/db'
 import Entry from '#models/entry'
 import {
@@ -38,6 +40,105 @@ function excelDate(date: DateTime) {
 function codeValue(code: string | null) {
   if (!code) return null
   return /^\d{1,15}$/.test(code) ? Number(code) : code
+}
+
+/**
+ * Official letterhead (from ENTITE.pdf) on top of every sheet: the French
+ * block on the left, the emblem in the middle and the Arabic / Tifinagh
+ * block on the right. Kept as images so the scripts print exactly as in
+ * the PDF whatever fonts the computer has.
+ */
+const LETTERHEAD_ROWS = 2
+/**
+ * In the PDF the three blocks span 2127 px for 427 px of height (300 dpi
+ * crops). The letterhead keeps that shape and covers 92% of the sheet's
+ * width, so it prints at the same relative size on narrow and wide sheets.
+ */
+const LETTERHEAD_SOURCE = { width: 2127, height: 427 }
+const LETTERHEAD_SPAN = 0.92
+const LETTERHEAD_PARTS = ['left', 'emblem', 'right'] as const
+
+type LetterheadPart = (typeof LETTERHEAD_PARTS)[number]
+type LetterheadFile = { buffer: Buffer; width: number; height: number }
+let letterheadFiles: Promise<Record<LetterheadPart, LetterheadFile>> | undefined
+
+function loadLetterhead() {
+  letterheadFiles ??= Promise.all(
+    LETTERHEAD_PARTS.map(async (part) => {
+      const buffer = await readFile(app.makePath('resources/letterhead', `${part}.png`))
+      // PNG header: width and height are the big-endian ints at bytes 16 and 20.
+      const file = { buffer, width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) }
+      return [part, file] as const
+    })
+  ).then((parts) => Object.fromEntries(parts) as Record<LetterheadPart, LetterheadFile>)
+  return letterheadFiles
+}
+
+const letterheadIds = new WeakMap<ExcelJS.Workbook, Record<LetterheadPart, number>>()
+
+/**
+ * Draws the letterhead over the first LETTERHEAD_ROWS rows of `ws`,
+ * spread across columns `firstCol`–`lastCol` (1-based). Sheet content
+ * starts at row LETTERHEAD_ROWS + 1.
+ */
+async function addLetterhead(
+  workbook: ExcelJS.Workbook,
+  ws: ExcelJS.Worksheet,
+  firstCol: number,
+  lastCol: number
+) {
+  const files = await loadLetterhead()
+  let ids = letterheadIds.get(workbook)
+  if (!ids) {
+    const added = {} as Record<LetterheadPart, number>
+    for (const part of LETTERHEAD_PARTS) {
+      // exceljs types expect the older global Buffer type.
+      const buffer = files[part].buffer as unknown as ExcelJS.Buffer
+      added[part] = workbook.addImage({ buffer, extension: 'png' })
+    }
+    ids = added
+    letterheadIds.set(workbook, ids)
+  }
+
+  // Column widths in pixels (≈ 7 px per character at Calibri 11).
+  const widths: number[] = []
+  for (let c = firstCol; c <= lastCol; c++) widths.push((ws.getColumn(c).width ?? 9) * 7)
+  const total = widths.reduce((a, b) => a + b, 0)
+
+  /** Fractional, 0-based column position `x` pixels right of firstCol. */
+  const colAt = (x: number) => {
+    let left = 0
+    for (const [i, w] of widths.entries()) {
+      if (x < left + w) return firstCol - 1 + i + (x - left) / w
+      left += w
+    }
+    return lastCol
+  }
+
+  const span = total * LETTERHEAD_SPAN
+  const height = Math.round((span * LETTERHEAD_SOURCE.height) / LETTERHEAD_SOURCE.width)
+  const size = (part: LetterheadPart) => ({
+    width: Math.round((files[part].width * height) / files[part].height),
+    height,
+  })
+  const start = (total - span) / 2
+  const positions: Record<LetterheadPart, number> = {
+    left: start,
+    emblem: (total - size('emblem').width) / 2,
+    right: start + span - size('right').width,
+  }
+
+  // Row 1 holds the images (px → pt is ×0.75), row 2 is a small gap.
+  ws.getRow(1).height = Math.ceil(height * 0.75) + 4
+  ws.getRow(2).height = 8
+
+  for (const part of LETTERHEAD_PARTS) {
+    ws.addImage(ids[part], {
+      tl: { col: colAt(positions[part]), row: 0 },
+      ext: size(part),
+      editAs: 'oneCell',
+    })
+  }
 }
 
 type StockLine = { code: string | null; designation: string | null; total: number }
@@ -107,6 +208,7 @@ export async function buildStockWorkbook(asOf: DateTime) {
     { width: 30 },
     { width: 16 },
   ]
+  await addLetterhead(workbook, ws, 1, 7)
   const font = (size = 11, bold = false, color?: string): Partial<ExcelJS.Font> => ({
     name: 'Calibri',
     size,
@@ -114,16 +216,18 @@ export async function buildStockWorkbook(asOf: DateTime) {
     ...(color ? { color: { argb: color } } : {}),
   })
 
-  ws.getCell('A1').value = 'SITUATION DU STOCK'
-  ws.getCell('A1').font = font(16, true)
-  ws.getRow(1).height = 21
+  const titleRow = LETTERHEAD_ROWS + 1
+  const dateRow = titleRow + 1
+  ws.getCell(`A${titleRow}`).value = 'SITUATION DU STOCK'
+  ws.getCell(`A${titleRow}`).font = font(16, true)
+  ws.getRow(titleRow).height = 21
 
-  ws.getCell('A2').value = 'Situation au :'
-  ws.getCell('A2').font = font(10)
-  ws.getCell('B2').value = excelDate(asOf)
-  ws.getCell('B2').numFmt = 'dd/mm/yyyy'
-  ws.getCell('B2').font = font(10, true)
-  ws.getCell('B2').alignment = { horizontal: 'left' }
+  ws.getCell(`A${dateRow}`).value = 'Situation au :'
+  ws.getCell(`A${dateRow}`).font = font(10)
+  ws.getCell(`B${dateRow}`).value = excelDate(asOf)
+  ws.getCell(`B${dateRow}`).numFmt = 'dd/mm/yyyy'
+  ws.getCell(`B${dateRow}`).font = font(10, true)
+  ws.getCell(`B${dateRow}`).alignment = { horizontal: 'left' }
 
   /**
    * Writes one warehouse block starting at `startCol` (1 = A, 5 = E) and
@@ -184,7 +288,7 @@ export async function buildStockWorkbook(asOf: DateTime) {
     totalCell.numFmt = '#,##0'
   }
 
-  let top = 4
+  let top = titleRow + 3
   for (const [left, right] of [
     [1, 2],
     [3, 4],
@@ -228,7 +332,7 @@ export async function buildStockWorkbook(asOf: DateTime) {
 
   ws.pageSetup.printArea = `A1:G${top + 7}`
 
-  addTotalsByArticleSheet(workbook, lines, {
+  await addTotalsByArticleSheet(workbook, lines, {
     sheetName: 'TOTAL PAR ARTICLE',
     title: 'SITUATION DU STOCK — TOTAL PAR ARTICLE',
     dateLabel: 'Situation au :',
@@ -246,7 +350,7 @@ export async function buildDailyWorkbook(day: DateTime) {
   const lines = await stockLines(day, true)
   const workbook = new ExcelJS.Workbook()
   workbook.creator = 'Entropos'
-  addTotalsByArticleSheet(workbook, lines, {
+  await addTotalsByArticleSheet(workbook, lines, {
     sheetName: 'ENTREES DU JOUR',
     title: 'ENTRÉES DU JOUR PAR ARTICLE ET PAR ENTREPÔT',
     dateLabel: 'Date :',
@@ -261,7 +365,7 @@ export async function buildDailyWorkbook(day: DateTime) {
  * designation when they have no code. Used as the second sheet of the
  * stock export and as the daily export.
  */
-function addTotalsByArticleSheet(
+async function addTotalsByArticleSheet(
   workbook: ExcelJS.Workbook,
   lines: Map<number, StockLine[]>,
   sheet: { sheetName: string; title: string; dateLabel: string; date: DateTime }
@@ -296,7 +400,7 @@ function addTotalsByArticleSheet(
   })
 
   const ws = workbook.addWorksheet(sheet.sheetName, {
-    views: [{ state: 'frozen', ySplit: 4, showGridLines: false }],
+    views: [{ showGridLines: false }],
     pageSetup: {
       orientation: 'landscape',
       paperSize: 9,
@@ -311,6 +415,7 @@ function addTotalsByArticleSheet(
     ...ENTREPOTS.map(() => ({ width: 14 })),
     { width: 18 },
   ]
+  await addLetterhead(workbook, ws, 1, ENTREPOTS.length + 3)
 
   const font = (size = 11, bold = false, color?: string): Partial<ExcelJS.Font> => ({
     name: 'Calibri',
@@ -321,17 +426,19 @@ function addTotalsByArticleSheet(
   // Zeros show as a dash so the article's warehouses stand out.
   const qtyFormat = '#,##0;-#,##0;"–"'
 
-  ws.getCell('A1').value = sheet.title
-  ws.getCell('A1').font = font(16, true)
-  ws.getRow(1).height = 21
-  ws.getCell('A2').value = sheet.dateLabel
-  ws.getCell('A2').font = font(10)
-  ws.getCell('B2').value = excelDate(sheet.date)
-  ws.getCell('B2').numFmt = 'dd/mm/yyyy'
-  ws.getCell('B2').font = font(10, true)
-  ws.getCell('B2').alignment = { horizontal: 'left' }
+  const titleRow = LETTERHEAD_ROWS + 1
+  const dateRow = titleRow + 1
+  ws.getCell(`A${titleRow}`).value = sheet.title
+  ws.getCell(`A${titleRow}`).font = font(16, true)
+  ws.getRow(titleRow).height = 21
+  ws.getCell(`A${dateRow}`).value = sheet.dateLabel
+  ws.getCell(`A${dateRow}`).font = font(10)
+  ws.getCell(`B${dateRow}`).value = excelDate(sheet.date)
+  ws.getCell(`B${dateRow}`).numFmt = 'dd/mm/yyyy'
+  ws.getCell(`B${dateRow}`).font = font(10, true)
+  ws.getCell(`B${dateRow}`).alignment = { horizontal: 'left' }
 
-  const headerRow = 4
+  const headerRow = titleRow + 3
   const headers = [
     'Code Article',
     'Désignation',
@@ -430,6 +537,7 @@ export async function buildFicheWorkbook(day: DateTime, entrepot?: number) {
 
   const widths = [3, 16.1, 21.6, 18.9, 21.1, 20.9, 22.1, 19.3, 20.7, 21.7, 21.3, 18.3, 14.7, 15.7]
   ws.columns = widths.map((width) => ({ width }))
+  await addLetterhead(workbook, ws, 2, widths.length)
 
   const font = (size = 11, bold = false): Partial<ExcelJS.Font> => ({
     name: 'Calibri',
@@ -438,13 +546,14 @@ export async function buildFicheWorkbook(day: DateTime, entrepot?: number) {
     color: { argb: BLACK },
   })
 
-  ws.getCell('B2').value = "FICHE D'ENTRÉE"
-  ws.getCell('B2').font = font(16, true)
-  ws.getCell('B3').value =
+  const titleRow = LETTERHEAD_ROWS + 2
+  ws.getCell(`B${titleRow}`).value = "FICHE D'ENTRÉE"
+  ws.getCell(`B${titleRow}`).font = font(16, true)
+  ws.getCell(`B${titleRow + 1}`).value =
     `Date : ${day.toFormat('dd/MM/yyyy')}${entrepot ? ` — Entrepôt ${entrepot}` : ''}`
-  ws.getCell('B3').font = font(11, true)
+  ws.getCell(`B${titleRow + 1}`).font = font(11, true)
 
-  const headerRow = 5
+  const headerRow = titleRow + 3
   const headers = [
     '',
     'DATE DECHARGEMENT',
@@ -527,7 +636,7 @@ export async function buildFicheWorkbook(day: DateTime, entrepot?: number) {
   sum.font = font(11, true)
   sum.alignment = { horizontal: 'center', vertical: 'middle' }
 
-  ws.pageSetup.printArea = `B2:${ws.getColumn(lastCol).letter}${totalRow}`
+  ws.pageSetup.printArea = `B1:${ws.getColumn(lastCol).letter}${totalRow}`
 
   return workbook
 }
@@ -664,7 +773,7 @@ export async function buildRegistreWorkbook(range: { from?: DateTime; to?: DateT
 
   for (const sheet of sheets) {
     const ws = workbook.addWorksheet(sheet.name, {
-      views: [{ state: 'frozen', ySplit: 1, zoomScale: 90 }],
+      views: [{ zoomScale: 90 }],
       pageSetup: {
         orientation: 'landscape',
         paperSize: 9,
@@ -674,8 +783,10 @@ export async function buildRegistreWorkbook(range: { from?: DateTime; to?: DateT
       },
     })
     ws.columns = REGISTRE_COLUMNS.map((c) => ({ width: c.width }))
+    await addLetterhead(workbook, ws, 1, REGISTRE_COLUMNS.length)
 
-    const headerRow = ws.getRow(1)
+    const headerNumber = LETTERHEAD_ROWS + 1
+    const headerRow = ws.getRow(headerNumber)
     headerRow.height = 60
     REGISTRE_COLUMNS.forEach((c, i) => {
       const cell = headerRow.getCell(i + 1)
@@ -692,7 +803,7 @@ export async function buildRegistreWorkbook(range: { from?: DateTime; to?: DateT
     })
 
     sheet.entries.forEach((entry, index) => {
-      const row = ws.getRow(2 + index)
+      const row = ws.getRow(headerNumber + 1 + index)
       row.height = 36
       REGISTRE_COLUMNS.forEach((c, i) => {
         const cell = row.getCell(i + 1)
@@ -705,8 +816,8 @@ export async function buildRegistreWorkbook(range: { from?: DateTime; to?: DateT
       })
     })
 
-    const firstData = 2
-    const lastData = Math.max(firstData, 1 + sheet.entries.length)
+    const firstData = headerNumber + 1
+    const lastData = Math.max(firstData, headerNumber + sheet.entries.length)
 
     /**
      * Totals row, as in the original. Only written when there are entries:
@@ -753,8 +864,10 @@ export async function buildRegistreWorkbook(range: { from?: DateTime; to?: DateT
     list('Statut Commande', STATUTS, true)
     list('Contrôleur', CONTROLEURS_INITIAUX, false)
 
-    ws.autoFilter = `A1:${last}${lastData}`
+    ws.autoFilter = `A${headerNumber}:${last}${lastData}`
     ws.pageSetup.printArea = `A1:${last}${lastRow}`
+    // The column headers repeat on every printed page.
+    ws.pageSetup.printTitlesRow = `${headerNumber}:${headerNumber}`
   }
 
   return workbook
