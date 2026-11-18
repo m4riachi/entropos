@@ -31,12 +31,24 @@ function toAttributes(data: EntryPayload) {
   return attributes as Partial<Entry>
 }
 
+/**
+ * The list URL last shown (filters, sort, page), kept in the session so
+ * "Retour", "Annuler" and saving from the form go back to the same view.
+ */
+const LIST_URL_KEY = 'entries.listUrl'
+
+function listUrl(session: HttpContext['session']) {
+  const url = session.get(LIST_URL_KEY)
+  return typeof url === 'string' && /^\/entrees(\?|$)/.test(url) ? url : '/entrees'
+}
+
 function escapeLike(value: string) {
   return value.replace(/[\\%_]/g, (c) => `\\${c}`)
 }
 
 export default class EntriesController {
-  async index({ request, inertia }: HttpContext) {
+  async index({ request, inertia, session }: HttpContext) {
+    session.put(LIST_URL_KEY, request.url(true))
     const [, parsed] = await entryListValidator.tryValidate(request.qs())
     const filters = parsed ?? {}
 
@@ -110,9 +122,10 @@ export default class EntriesController {
     })
   }
 
-  async create({ inertia }: HttpContext) {
+  async create({ inertia, session }: HttpContext) {
     return inertia.render('entries/form', {
       entry: null,
+      backUrl: listUrl(session),
       ...(await entryFormData()),
     })
   }
@@ -125,13 +138,14 @@ export default class EntriesController {
     if (request.input('andNew')) {
       return response.redirect().withQs(false).toRoute('entries.create')
     }
-    return response.redirect().withQs(false).toRoute('entries.index')
+    return response.redirect(listUrl(session))
   }
 
-  async edit({ params, inertia }: HttpContext) {
+  async edit({ params, inertia, session }: HttpContext) {
     const entry = await Entry.findOrFail(params.id)
     return inertia.render('entries/form', {
       entry: EntryTransformer.transform(entry),
+      backUrl: listUrl(session),
       ...(await entryFormData()),
     })
   }
@@ -143,7 +157,7 @@ export default class EntriesController {
     await entry.save()
 
     session.flash('success', 'Entrée mise à jour')
-    return response.redirect().withQs(false).toRoute('entries.index')
+    return response.redirect(listUrl(session))
   }
 
   async destroy({ params, response, session }: HttpContext) {

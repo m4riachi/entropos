@@ -20,6 +20,8 @@ type SuggestionKey =
 
 const props = defineProps<{
   entry: Data.Entry | null
+  /** The list with the filters it had when the form was opened. */
+  backUrl: string
   options: { entrepots: number[]; statuts: string[]; quais: string[] }
   suggestions: Record<SuggestionKey, string[]>
   designationsByCode: Record<string, string>
@@ -189,7 +191,7 @@ const sections: { title: string; fields: FieldDef[] }[] = [
 ]
 
 function goBack() {
-  router.visit('/entrees')
+  router.visit(props.backUrl)
 }
 </script>
 
@@ -201,7 +203,7 @@ function goBack() {
       "
     >
       <template #actions>
-        <a href="/entrees" class="btn btn--secondary" @click.prevent="goBack">
+        <a :href="backUrl" class="btn btn--secondary" @click.prevent="goBack">
           <ArrowLeft :size="16" /> Retour à la liste
         </a>
       </template>
