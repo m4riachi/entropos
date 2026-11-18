@@ -1,6 +1,14 @@
 import { DateTime } from 'luxon'
-import { buildFicheWorkbook, buildStockWorkbook } from '#services/excel_exports'
-import { ficheExportValidator, stockExportValidator } from '#validators/entry'
+import {
+  buildFicheWorkbook,
+  buildRegistreWorkbook,
+  buildStockWorkbook,
+} from '#services/excel_exports'
+import {
+  ficheExportValidator,
+  registreExportValidator,
+  stockExportValidator,
+} from '#validators/entry'
 import type { HttpContext } from '@adonisjs/core/http'
 import type ExcelJS from 'exceljs'
 
@@ -36,5 +44,16 @@ export default class ExportsController {
     const workbook = await buildFicheWorkbook(target, entrepot)
     const suffix = entrepot ? `_E${entrepot}` : ''
     return sendWorkbook(response, workbook, `Fiche_entree_${target.toISODate()}${suffix}.xlsx`)
+  }
+
+  async registre({ request, response }: HttpContext) {
+    const { from, date } = await registreExportValidator.validate(request.qs())
+    const to = day(date)
+    const start = from ? day(from) : undefined
+    const workbook = await buildRegistreWorkbook({ from: start, to })
+    const name = start
+      ? `Registre_entrees_${start.toISODate()}_${to.toISODate()}.xlsx`
+      : `Registre_entrees_${to.toISODate()}.xlsx`
+    return sendWorkbook(response, workbook, name)
   }
 }

@@ -19,5 +19,6 @@ export interface ApiDefinition {
   exports: {
     stock: typeof routes['exports.stock']
     fiche: typeof routes['exports.fiche']
+    registre: typeof routes['exports.registre']
   }
 }

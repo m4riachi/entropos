@@ -2,7 +2,13 @@ import ExcelJS from 'exceljs'
 import type { DateTime } from 'luxon'
 import db from '@adonisjs/lucid/services/db'
 import Entry from '#models/entry'
-import { ENTREPOTS, NUMERO_ORDRE_NUMERIC_SQL } from '#constants/entries'
+import {
+  CONTROLEURS_INITIAUX,
+  ENTREPOTS,
+  NUMERO_ORDRE_NUMERIC_SQL,
+  QUAIS,
+  STATUTS,
+} from '#constants/entries'
 
 const NAVY = 'FF1F3864'
 const PALE_BLUE = 'FFD9E1F2'
@@ -347,4 +353,246 @@ export async function buildFicheWorkbook(day: DateTime, entrepot?: number) {
   ws.pageSetup.printArea = `B2:${ws.getColumn(lastCol).letter}${totalRow}`
 
   return workbook
+}
+
+const GREEN = 'FF00B050'
+const DARK_BLUE = 'FF1F497D'
+const OLIVE = 'FF4F6228'
+const RED = 'FFFF0000'
+const LIGHT_GREY = 'FFF2F2F2'
+
+type RegistreColumn = {
+  header: string
+  width: number
+  value: (entry: Entry) => ExcelJS.CellValue
+  font?: { size: number; bold?: boolean; color?: string }
+  numFmt?: string
+  fill?: string
+}
+
+/**
+ * Columns A–S of the "ENTREPOT n" sheets, in the order, widths and fonts
+ * of "FICHE D'ENTRE 13-11-2026 ORIGINE.xlsx". Headers are kept verbatim
+ * so the file can be imported back with `import:excel`.
+ */
+const REGISTRE_COLUMNS: RegistreColumn[] = [
+  { header: 'N° ORDRE', width: 11.4, value: (e) => codeValue(e.numeroOrdre) },
+  {
+    header: 'Date Réception',
+    width: 15.6,
+    value: (e) => (e.dateReception ? excelDate(e.dateReception) : null),
+    font: { size: 12 },
+    numFmt: 'dd/mm/yyyy',
+  },
+  {
+    header: 'Code Article',
+    width: 14,
+    value: (e) => codeValue(e.codeArticle),
+    font: { size: 13, color: DARK_BLUE },
+  },
+  { header: 'Désignation (auto)', width: 24.6, value: (e) => e.designation, font: { size: 12 } },
+  { header: 'Fournisseur', width: 19.7, value: (e) => e.fournisseur, font: { size: 12 } },
+  {
+    header: 'N° BL ',
+    width: 26,
+    value: (e) => e.numeroBl,
+    font: { size: 13, color: DARK_BLUE },
+  },
+  { header: 'N° MARCHE', width: 13.3, value: (e) => e.numeroMarche, font: { size: 12 } },
+  {
+    header: 'N° Order Affectation',
+    width: 13.6,
+    value: (e) => codeValue(e.numeroOrdreAffectation),
+  },
+  {
+    header: ' N° de livraison entrante',
+    width: 16.7,
+    value: (e) => codeValue(e.numeroLivraisonEntrante),
+  },
+  {
+    header: 'Qté Recus',
+    width: 13.1,
+    value: (e) => e.qteRecue,
+    font: { size: 12 },
+    numFmt: '#,##0',
+  },
+  {
+    header: 'Zone Dest',
+    width: 10.9,
+    value: (e) => e.zoneDest,
+    font: { size: 13 },
+    fill: LIGHT_GREY,
+  },
+  { header: 'Quai Attribué', width: 16.6, value: (e) => e.quai },
+  {
+    header: 'Statut Commande',
+    width: 24,
+    value: (e) => e.statut,
+    font: { size: 13, bold: true, color: OLIVE },
+  },
+  {
+    header: 'Écart Réception (auto)',
+    width: 13.3,
+    value: (e) => e.ecart,
+    // Shortages read "MOINS 5" like in the original, but stay numbers.
+    numFmt: '#,##0;"MOINS "#,##0;0',
+  },
+  { header: 'Contrôleur', width: 13.7, value: (e) => e.controleur },
+  { header: 'Matricule', width: 18.6, value: (e) => e.matricule, font: { size: 12 } },
+  { header: 'Nom du Chauffeur', width: 25.6, value: (e) => e.chauffeur, font: { size: 12 } },
+  { header: 'CNE', width: 13.9, value: (e) => e.cne },
+  {
+    header: 'N° TELE',
+    width: 13.9,
+    value: (e) => e.telephone,
+    font: { size: 12 },
+    numFmt: '@',
+  },
+]
+
+/**
+ * Export C: the entry register, laid out like
+ * "FICHE D'ENTRE 13-11-2026 ORIGINE.xlsx": one "ENTREPOT n" sheet per
+ * warehouse, every entry received between `from` and `to` (both optional,
+ * inclusive), then a totals row.
+ */
+export async function buildRegistreWorkbook(range: { from?: DateTime; to?: DateTime }) {
+  const query = Entry.query()
+  if (range.from) query.where('date_reception', '>=', range.from.toISODate()!)
+  if (range.to) query.where('date_reception', '<=', range.to.toISODate()!)
+  const entries = await query
+    .orderByRaw('date_reception ASC NULLS LAST')
+    .orderByRaw(`${NUMERO_ORDRE_NUMERIC_SQL} ASC NULLS LAST`)
+    .orderBy('id', 'asc')
+
+  const sheets: { name: string; entries: Entry[] }[] = ENTREPOTS.map((e) => ({
+    name: `ENTREPOT ${e}`,
+    entries: entries.filter((entry) => entry.entrepot === e),
+  }))
+  const unassigned = entries.filter((entry) => !entry.entrepot)
+  if (unassigned.length) sheets.push({ name: 'SANS ENTREPOT', entries: unassigned })
+
+  const workbook = new ExcelJS.Workbook()
+  workbook.creator = 'Entropos'
+
+  const font = (size: number, bold = false, color = BLACK): Partial<ExcelJS.Font> => ({
+    name: 'Calibri',
+    size,
+    bold,
+    color: { argb: color },
+  })
+  const position = (header: string) => REGISTRE_COLUMNS.findIndex((c) => c.header === header) + 1
+  const col = (header: string) => columnLetter(position(header))
+  const last = columnLetter(REGISTRE_COLUMNS.length)
+
+  for (const sheet of sheets) {
+    const ws = workbook.addWorksheet(sheet.name, {
+      views: [{ state: 'frozen', ySplit: 1, zoomScale: 90 }],
+      pageSetup: {
+        orientation: 'landscape',
+        paperSize: 9,
+        fitToPage: true,
+        fitToWidth: 1,
+        fitToHeight: 0,
+      },
+    })
+    ws.columns = REGISTRE_COLUMNS.map((c) => ({ width: c.width }))
+
+    const headerRow = ws.getRow(1)
+    headerRow.height = 60
+    REGISTRE_COLUMNS.forEach((c, i) => {
+      const cell = headerRow.getCell(i + 1)
+      cell.value = c.header
+      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
+      cell.border = allThin
+      // N° ORDRE has no fill in the original; Statut is written in red.
+      if (i === 0) {
+        cell.font = font(14)
+      } else {
+        cell.font = font(14, true, c.header === 'Statut Commande' ? RED : DARK_BLUE)
+        cell.fill = fill(GREEN)
+      }
+    })
+
+    sheet.entries.forEach((entry, index) => {
+      const row = ws.getRow(2 + index)
+      row.height = 36
+      REGISTRE_COLUMNS.forEach((c, i) => {
+        const cell = row.getCell(i + 1)
+        cell.value = c.value(entry) ?? null
+        cell.font = font(c.font?.size ?? 11, c.font?.bold, c.font?.color)
+        cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
+        cell.border = allThin
+        if (c.numFmt) cell.numFmt = c.numFmt
+        if (c.fill) cell.fill = fill(c.fill)
+      })
+    })
+
+    const firstData = 2
+    const lastData = Math.max(firstData, 1 + sheet.entries.length)
+
+    /**
+     * Totals row, as in the original. Only written when there are entries:
+     * its SUM formulas are what makes `import:excel` skip it.
+     */
+    let lastRow = lastData
+    if (sheet.entries.length) {
+      const totalRow = lastData + 1
+      lastRow = totalRow
+      // "TOTAL" sits just left of the Qté column.
+      const label = ws.getCell(totalRow, position('Qté Recus') - 1)
+      label.value = 'TOTAL'
+      label.font = font(12, true)
+      label.alignment = { horizontal: 'center', vertical: 'middle' }
+      for (const [name, result] of [
+        ['Qté Recus', sheet.entries.reduce((acc, e) => acc + (e.qteRecue ?? 0), 0)],
+        ['Écart Réception (auto)', sheet.entries.reduce((acc, e) => acc + (e.ecart ?? 0), 0)],
+      ] as const) {
+        const letter = col(name)
+        const cell = ws.getCell(`${letter}${totalRow}`)
+        cell.value = { formula: `SUM(${letter}${firstData}:${letter}${lastData})`, result }
+        cell.font = font(12, true)
+        cell.alignment = { horizontal: 'center', vertical: 'middle' }
+        cell.numFmt = REGISTRE_COLUMNS[position(name) - 1].numFmt!
+      }
+    }
+
+    /**
+     * Drop-down lists like the original's, on the data rows plus some
+     * room below for rows typed by hand.
+     */
+    const list = (name: string, values: readonly string[], strict: boolean) => {
+      const column = ws.getColumn(position(name))
+      for (let r = firstData; r <= lastData + 200; r++) {
+        ws.getCell(r, column.number).dataValidation = {
+          type: 'list',
+          allowBlank: true,
+          formulae: [`"${values.join(',')}"`],
+          showErrorMessage: strict,
+        }
+      }
+    }
+    list('Quai Attribué', QUAIS, true)
+    list('Statut Commande', STATUTS, true)
+    list('Contrôleur', CONTROLEURS_INITIAUX, false)
+
+    ws.autoFilter = `A1:${last}${lastData}`
+    ws.pageSetup.printArea = `A1:${last}${lastRow}`
+  }
+
+  return workbook
+}
+
+/**
+ * 1 → A, 19 → S, 27 → AA.
+ */
+function columnLetter(index: number) {
+  let n = index
+  let s = ''
+  while (n > 0) {
+    const r = (n - 1) % 26
+    s = String.fromCharCode(65 + r) + s
+    n = Math.floor((n - 1) / 26)
+  }
+  return s
 }

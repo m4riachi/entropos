@@ -151,6 +151,19 @@ export interface Registry {
       rawResponse: ExtractRawResponse<Awaited<ReturnType<import('#controllers/exports_controller').default['fiche']>>> | { status: 422; response: { errors: SimpleError[] } }
     }
   }
+  'exports.registre': {
+    methods: ["GET","HEAD"]
+    pattern: '/exports/registre'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: ExtractQueryForGet<InferInput<(typeof import('#validators/entry').registreExportValidator)>>
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/exports_controller').default['registre']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/exports_controller').default['registre']>>> | { status: 422; response: { errors: SimpleError[] } }
+      rawResponse: ExtractRawResponse<Awaited<ReturnType<import('#controllers/exports_controller').default['registre']>>> | { status: 422; response: { errors: SimpleError[] } }
+    }
+  }
   'session.destroy': {
     methods: ["POST"]
     pattern: '/logout'

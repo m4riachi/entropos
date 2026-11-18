@@ -148,6 +148,7 @@ function doDelete() {
 /* --- exports --- */
 const stockRef = ref<InstanceType<typeof ExportDialog>>()
 const ficheRef = ref<InstanceType<typeof ExportDialog>>()
+const registreRef = ref<InstanceType<typeof ExportDialog>>()
 
 function editUrl(entry: Data.Entry) {
   return `/entrees/${entry.id}/modifier`
@@ -166,6 +167,9 @@ function openEdit(entry: Data.Entry) {
         </button>
         <button type="button" class="btn btn--secondary" @click="ficheRef?.open()">
           <FileSpreadsheet :size="16" /> Fiche d'entrée
+        </button>
+        <button type="button" class="btn btn--secondary" @click="registreRef?.open()">
+          <FileSpreadsheet :size="16" /> Registre des entrées
         </button>
         <a
           href="/entrees/nouvelle"
@@ -415,6 +419,14 @@ function openEdit(entry: Data.Entry) {
       url="/exports/fiche-entree"
       with-entrepot
       :entrepots="options.entrepots"
+    />
+    <ExportDialog
+      ref="registreRef"
+      title="Registre des entrées"
+      description="Toutes les entrées, une feuille par entrepôt, comme le fichier Excel d'origine. Laissez « Du » vide pour tout reprendre depuis le début."
+      from-label="Du"
+      date-label="Au"
+      url="/exports/registre"
     />
   </AppLayout>
 </template>

@@ -15,6 +15,7 @@ export type ScannedRoutes = {
     'entries.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'exports.stock': { paramsTuple?: []; params?: {} }
     'exports.fiche': { paramsTuple?: []; params?: {} }
+    'exports.registre': { paramsTuple?: []; params?: {} }
     'session.destroy': { paramsTuple?: []; params?: {} }
   }
   GET: {
@@ -25,6 +26,7 @@ export type ScannedRoutes = {
     'entries.edit': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'exports.stock': { paramsTuple?: []; params?: {} }
     'exports.fiche': { paramsTuple?: []; params?: {} }
+    'exports.registre': { paramsTuple?: []; params?: {} }
   }
   HEAD: {
     'session.create': { paramsTuple?: []; params?: {} }
@@ -34,6 +36,7 @@ export type ScannedRoutes = {
     'entries.edit': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'exports.stock': { paramsTuple?: []; params?: {} }
     'exports.fiche': { paramsTuple?: []; params?: {} }
+    'exports.registre': { paramsTuple?: []; params?: {} }
   }
   POST: {
     'session.store': { paramsTuple?: []; params?: {} }

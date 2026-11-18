@@ -74,6 +74,12 @@ const routes = {
     tokens: [[0,"exports"],[0,"fiche-entree"]],
     types: placeholder as Registry['exports.fiche']['types'],
   },
+  'exports.registre': {
+    methods: ["GET","HEAD"],
+    pattern: '/exports/registre',
+    tokens: [[0,"exports"],[0,"registre"]],
+    types: placeholder as Registry['exports.registre']['types'],
+  },
   'session.destroy': {
     methods: ["POST"],
     pattern: '/logout',

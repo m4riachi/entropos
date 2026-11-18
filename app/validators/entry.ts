@@ -71,6 +71,11 @@ export const stockExportValidator = vine.create({
   date: vine.date({ formats: ['YYYY-MM-DD'] }).optional(),
 })
 
+export const registreExportValidator = vine.create({
+  from: vine.date({ formats: ['YYYY-MM-DD'] }).optional(),
+  date: vine.date({ formats: ['YYYY-MM-DD'] }).optional(),
+})
+
 export const ficheExportValidator = vine.create({
   date: vine.date({ formats: ['YYYY-MM-DD'] }).optional(),
   entrepot: vine

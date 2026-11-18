@@ -11,6 +11,8 @@ const props = defineProps<{
   description: string
   url: string
   dateLabel: string
+  /** Shows an optional start date, sent as `from`. */
+  fromLabel?: string
   withEntrepot?: boolean
   entrepots?: number[]
 }>()
@@ -23,10 +25,12 @@ function today() {
 
 const dialog = ref<HTMLDialogElement>()
 const date = ref(today())
+const from = ref('')
 const entrepot = ref<string>('')
 
 const href = computed(() => {
   const qs = new URLSearchParams()
+  if (props.fromLabel && from.value) qs.set('from', from.value)
   if (date.value) qs.set('date', date.value)
   if (props.withEntrepot && entrepot.value) qs.set('entrepot', entrepot.value)
   return `${props.url}?${qs.toString()}`
@@ -35,6 +39,7 @@ const href = computed(() => {
 defineExpose({
   open: () => {
     date.value = today()
+    from.value = ''
     dialog.value?.showModal()
   },
 })
@@ -45,6 +50,10 @@ defineExpose({
     <h2 class="dialog__title">{{ title }}</h2>
     <p class="dialog__text">{{ description }}</p>
     <div class="dialog__body">
+      <div v-if="fromLabel" class="field">
+        <label class="field__label" :for="`${url}-from`">{{ fromLabel }}</label>
+        <input :id="`${url}-from`" v-model="from" type="date" class="field__input" />
+      </div>
       <div class="field">
         <label class="field__label" :for="`${url}-date`">{{ dateLabel }}</label>
         <input :id="`${url}-date`" v-model="date" type="date" class="field__input" />
