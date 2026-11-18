@@ -42,7 +42,11 @@ function codeValue(code: string | null) {
 
 type StockLine = { code: string | null; designation: string | null; total: number }
 
-async function stockLines(asOf: DateTime) {
+/**
+ * Quantities received per entrepôt and article: everything up to `date`
+ * (entries without a date included), or only that day when `onlyThatDay`.
+ */
+async function stockLines(date: DateTime, onlyThatDay = false) {
   const result = await db.rawQuery<{
     rows: { entrepot: number; code: string | null; designation: string | null; total: string }[]
   }>(
@@ -53,12 +57,12 @@ async function stockLines(asOf: DateTime) {
             COALESCE(SUM(qte_recue), 0) AS total
        FROM entries
       WHERE entrepot IS NOT NULL
-        AND (date_reception IS NULL OR date_reception <= ?)
+        AND ${onlyThatDay ? 'date_reception = ?' : '(date_reception IS NULL OR date_reception <= ?)'}
       GROUP BY entrepot,
                NULLIF(trim(code_article), ''),
                CASE WHEN NULLIF(trim(code_article), '') IS NULL THEN upper(trim(designation)) END
       ORDER BY entrepot, code NULLS LAST`,
-    [asOf.toISODate()]
+    [date.toISODate()]
   )
 
   const byEntrepot = new Map<number, StockLine[]>()
@@ -224,20 +228,43 @@ export async function buildStockWorkbook(asOf: DateTime) {
 
   ws.pageSetup.printArea = `A1:G${top + 7}`
 
-  addTotalsByArticleSheet(workbook, lines, asOf)
+  addTotalsByArticleSheet(workbook, lines, {
+    sheetName: 'TOTAL PAR ARTICLE',
+    title: 'SITUATION DU STOCK — TOTAL PAR ARTICLE',
+    dateLabel: 'Situation au :',
+    date: asOf,
+  })
 
   return workbook
 }
 
 /**
- * Second sheet of the stock export: one row per article with its quantity
- * in each entrepôt and the grand total across all of them. Articles are
- * matched by code, or by designation when they have no code.
+ * Export D: "ENTRÉES DU JOUR", what was received on one day, per article
+ * and entrepôt, with totals.
+ */
+export async function buildDailyWorkbook(day: DateTime) {
+  const lines = await stockLines(day, true)
+  const workbook = new ExcelJS.Workbook()
+  workbook.creator = 'Entropos'
+  addTotalsByArticleSheet(workbook, lines, {
+    sheetName: 'ENTREES DU JOUR',
+    title: 'ENTRÉES DU JOUR PAR ARTICLE ET PAR ENTREPÔT',
+    dateLabel: 'Date :',
+    date: day,
+  })
+  return workbook
+}
+
+/**
+ * One row per article with its quantity in each entrepôt and the grand
+ * total across all of them. Articles are matched by code, or by
+ * designation when they have no code. Used as the second sheet of the
+ * stock export and as the daily export.
  */
 function addTotalsByArticleSheet(
   workbook: ExcelJS.Workbook,
   lines: Map<number, StockLine[]>,
-  asOf: DateTime
+  sheet: { sheetName: string; title: string; dateLabel: string; date: DateTime }
 ) {
   type Article = { code: string | null; designation: string | null; qty: Map<number, number> }
   const articles = new Map<string, Article>()
@@ -268,7 +295,7 @@ function addTotalsByArticleSheet(
     return (a.designation ?? '').localeCompare(b.designation ?? '', 'fr')
   })
 
-  const ws = workbook.addWorksheet('TOTAL PAR ARTICLE', {
+  const ws = workbook.addWorksheet(sheet.sheetName, {
     views: [{ state: 'frozen', ySplit: 4, showGridLines: false }],
     pageSetup: {
       orientation: 'landscape',
@@ -294,12 +321,12 @@ function addTotalsByArticleSheet(
   // Zeros show as a dash so the article's warehouses stand out.
   const qtyFormat = '#,##0;-#,##0;"–"'
 
-  ws.getCell('A1').value = 'SITUATION DU STOCK — TOTAL PAR ARTICLE'
+  ws.getCell('A1').value = sheet.title
   ws.getCell('A1').font = font(16, true)
   ws.getRow(1).height = 21
-  ws.getCell('A2').value = 'Situation au :'
+  ws.getCell('A2').value = sheet.dateLabel
   ws.getCell('A2').font = font(10)
-  ws.getCell('B2').value = excelDate(asOf)
+  ws.getCell('B2').value = excelDate(sheet.date)
   ws.getCell('B2').numFmt = 'dd/mm/yyyy'
   ws.getCell('B2').font = font(10, true)
   ws.getCell('B2').alignment = { horizontal: 'left' }

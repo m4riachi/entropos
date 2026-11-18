@@ -149,6 +149,7 @@ function doDelete() {
 const stockRef = ref<InstanceType<typeof ExportDialog>>()
 const ficheRef = ref<InstanceType<typeof ExportDialog>>()
 const registreRef = ref<InstanceType<typeof ExportDialog>>()
+const dailyRef = ref<InstanceType<typeof ExportDialog>>()
 
 function editUrl(entry: Data.Entry) {
   return `/entrees/${entry.id}/modifier`
@@ -164,6 +165,9 @@ function openEdit(entry: Data.Entry) {
       <template #actions>
         <button type="button" class="btn btn--secondary" @click="stockRef?.open()">
           <FileSpreadsheet :size="16" /> Situation du stock
+        </button>
+        <button type="button" class="btn btn--secondary" @click="dailyRef?.open()">
+          <FileSpreadsheet :size="16" /> Entrées du jour
         </button>
         <button type="button" class="btn btn--secondary" @click="ficheRef?.open()">
           <FileSpreadsheet :size="16" /> Fiche d'entrée
@@ -410,6 +414,13 @@ function openEdit(entry: Data.Entry) {
       description="Quantités reçues par article et par entrepôt, plus une feuille avec le total de chaque article tous entrepôts confondus, jusqu'à la date choisie."
       date-label="Situation au"
       url="/exports/situation-stock"
+    />
+    <ExportDialog
+      ref="dailyRef"
+      title="Entrées du jour"
+      description="Quantités reçues ce jour-là, par article et par entrepôt, avec les totaux."
+      date-label="Jour"
+      url="/exports/entrees-du-jour"
     />
     <ExportDialog
       ref="ficheRef"

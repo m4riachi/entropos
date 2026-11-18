@@ -74,6 +74,12 @@ const routes = {
     tokens: [[0,"exports"],[0,"fiche-entree"]],
     types: placeholder as Registry['exports.fiche']['types'],
   },
+  'exports.daily': {
+    methods: ["GET","HEAD"],
+    pattern: '/exports/entrees-du-jour',
+    tokens: [[0,"exports"],[0,"entrees-du-jour"]],
+    types: placeholder as Registry['exports.daily']['types'],
+  },
   'exports.registre': {
     methods: ["GET","HEAD"],
     pattern: '/exports/registre',

@@ -15,6 +15,7 @@ export type ScannedRoutes = {
     'entries.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'exports.stock': { paramsTuple?: []; params?: {} }
     'exports.fiche': { paramsTuple?: []; params?: {} }
+    'exports.daily': { paramsTuple?: []; params?: {} }
     'exports.registre': { paramsTuple?: []; params?: {} }
     'session.destroy': { paramsTuple?: []; params?: {} }
   }
@@ -26,6 +27,7 @@ export type ScannedRoutes = {
     'entries.edit': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'exports.stock': { paramsTuple?: []; params?: {} }
     'exports.fiche': { paramsTuple?: []; params?: {} }
+    'exports.daily': { paramsTuple?: []; params?: {} }
     'exports.registre': { paramsTuple?: []; params?: {} }
   }
   HEAD: {
@@ -36,6 +38,7 @@ export type ScannedRoutes = {
     'entries.edit': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'exports.stock': { paramsTuple?: []; params?: {} }
     'exports.fiche': { paramsTuple?: []; params?: {} }
+    'exports.daily': { paramsTuple?: []; params?: {} }
     'exports.registre': { paramsTuple?: []; params?: {} }
   }
   POST: {

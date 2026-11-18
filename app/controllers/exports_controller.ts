@@ -1,5 +1,6 @@
 import { DateTime } from 'luxon'
 import {
+  buildDailyWorkbook,
   buildFicheWorkbook,
   buildRegistreWorkbook,
   buildStockWorkbook,
@@ -36,6 +37,13 @@ export default class ExportsController {
     const asOf = day(date)
     const workbook = await buildStockWorkbook(asOf)
     return sendWorkbook(response, workbook, `Situation_stock_${asOf.toISODate()}.xlsx`)
+  }
+
+  async daily({ request, response }: HttpContext) {
+    const { date } = await stockExportValidator.validate(request.qs())
+    const target = day(date)
+    const workbook = await buildDailyWorkbook(target)
+    return sendWorkbook(response, workbook, `Entrees_du_jour_${target.toISODate()}.xlsx`)
   }
 
   async fiche({ request, response }: HttpContext) {

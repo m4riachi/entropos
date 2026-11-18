@@ -28,6 +28,7 @@ router
 
     router.get('exports/situation-stock', [controllers.Exports, 'stock']).as('exports.stock')
     router.get('exports/fiche-entree', [controllers.Exports, 'fiche']).as('exports.fiche')
+    router.get('exports/entrees-du-jour', [controllers.Exports, 'daily']).as('exports.daily')
     router.get('exports/registre', [controllers.Exports, 'registre']).as('exports.registre')
 
     router.post('logout', [controllers.Session, 'destroy'])

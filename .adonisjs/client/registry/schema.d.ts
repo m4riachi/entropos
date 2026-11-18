@@ -151,6 +151,19 @@ export interface Registry {
       rawResponse: ExtractRawResponse<Awaited<ReturnType<import('#controllers/exports_controller').default['fiche']>>> | { status: 422; response: { errors: SimpleError[] } }
     }
   }
+  'exports.daily': {
+    methods: ["GET","HEAD"]
+    pattern: '/exports/entrees-du-jour'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: ExtractQueryForGet<InferInput<(typeof import('#validators/entry').stockExportValidator)>>
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/exports_controller').default['daily']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/exports_controller').default['daily']>>> | { status: 422; response: { errors: SimpleError[] } }
+      rawResponse: ExtractRawResponse<Awaited<ReturnType<import('#controllers/exports_controller').default['daily']>>> | { status: 422; response: { errors: SimpleError[] } }
+    }
+  }
   'exports.registre': {
     methods: ["GET","HEAD"]
     pattern: '/exports/registre'
