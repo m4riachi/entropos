@@ -52,6 +52,13 @@ export const entryValidator = vine.create({
   transporteur: text(),
 })
 
+/**
+ * A photo or PDF of a bon de livraison to read.
+ */
+export const blExtractionValidator = vine.create({
+  bon: vine.file({ size: '20mb', extnames: ['jpg', 'jpeg', 'png', 'webp', 'gif', 'pdf'] }),
+})
+
 export const entryListValidator = vine.create({
   page: vine.number().withoutDecimals().min(1).optional(),
   sort: vine.string().optional(),

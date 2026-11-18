@@ -22,6 +22,7 @@ router
     router.get('entrees', [controllers.Entries, 'index']).as('entries.index')
     router.get('entrees/nouvelle', [controllers.Entries, 'create']).as('entries.create')
     router.post('entrees', [controllers.Entries, 'store']).as('entries.store')
+    router.post('entrees/lecture-bl', [controllers.Entries, 'readBl']).as('entries.readBl')
     router.get('entrees/:id/modifier', [controllers.Entries, 'edit']).as('entries.edit')
     router.put('entrees/:id', [controllers.Entries, 'update']).as('entries.update')
     router.delete('entrees/:id', [controllers.Entries, 'destroy']).as('entries.destroy')

@@ -44,6 +44,12 @@ const routes = {
     tokens: [[0,"entrees"]],
     types: placeholder as Registry['entries.store']['types'],
   },
+  'entries.readBl': {
+    methods: ["POST"],
+    pattern: '/entrees/lecture-bl',
+    tokens: [[0,"entrees"],[0,"lecture-bl"]],
+    types: placeholder as Registry['entries.readBl']['types'],
+  },
   'entries.edit': {
     methods: ["GET","HEAD"],
     pattern: '/entrees/:id/modifier',

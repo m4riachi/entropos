@@ -39,4 +39,7 @@ vine.messagesProvider = new SimpleMessagesProvider({
   'in': 'Valeur non autorisée',
   'regex': 'Format invalide',
   'telephone.regex': 'Chiffres, espaces et + uniquement',
+  'file': 'Choisissez un fichier',
+  'file.extname': 'Format non accepté : photo (JPG, PNG, WEBP, GIF) ou PDF',
+  'file.size': 'Fichier trop lourd (20 Mo maximum)',
 })

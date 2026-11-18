@@ -28,6 +28,10 @@ export default await Env.create(new URL('../', import.meta.url), {
   DATABASE_URL: Env.schema.string(),
   DB_SSL: Env.schema.boolean.optional(),
 
+  // Claude API key for reading bons de livraison (optional: the feature
+  // reports itself as not configured without it)
+  ANTHROPIC_API_KEY: Env.schema.string.optional(),
+
   // One-off setup at deploy time (see commands/app_bootstrap.ts)
   ADMIN_EMAIL: Env.schema.string.optional(),
   ADMIN_PASSWORD: Env.schema.string.optional(),

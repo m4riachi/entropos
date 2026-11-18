@@ -12,6 +12,7 @@ export interface ApiDefinition {
     index: typeof routes['entries.index']
     create: typeof routes['entries.create']
     store: typeof routes['entries.store']
+    readBl: typeof routes['entries.readBl']
     edit: typeof routes['entries.edit']
     update: typeof routes['entries.update']
     destroy: typeof routes['entries.destroy']

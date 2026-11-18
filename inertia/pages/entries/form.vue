@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { router, useForm } from '@inertiajs/vue3'
-import { ArrowLeft, Save, SaveAll } from 'lucide-vue-next'
+import { ArrowLeft, Save, SaveAll, ScanLine } from 'lucide-vue-next'
 import type { Data } from '@generated/data'
 import Page from '~/components/page.vue'
 import AppLayout from '~/layouts/app.vue'
@@ -193,6 +193,122 @@ const sections: { title: string; fields: FieldDef[] }[] = [
 function goBack() {
   router.visit(props.backUrl)
 }
+
+/* --- Bon de livraison: read with Claude to pre-fill a new entry --- */
+type BlArticle = { codeArticle: string | null; designation: string | null; quantite: number | null }
+type BlExtraction = {
+  fields: Record<string, string | null>
+  articles: BlArticle[]
+  remarques: string | null
+}
+
+const reading = ref(false)
+const blError = ref<string | null>(null)
+const blResult = ref<{ filled: number; articles: BlArticle[]; remarques: string | null } | null>(
+  null
+)
+const activeArticle = ref(0)
+/** Fields last filled from the BL, highlighted until the user edits them. */
+const fromBl = ref(new Set<string>())
+
+function xsrfToken() {
+  const match = document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]*)/)
+  return match ? decodeURIComponent(match[1]) : ''
+}
+
+/**
+ * Phone photos are often 5–15 MB: shrink images to 2000 px / JPEG before
+ * upload (the API takes up to 5 MB per image). PDFs are sent as they are.
+ */
+async function prepareUpload(file: File): Promise<{ blob: Blob; name: string }> {
+  if (file.type === 'application/pdf' || !file.type.startsWith('image/')) {
+    return { blob: file, name: file.name }
+  }
+  try {
+    const bitmap = await createImageBitmap(file)
+    const scale = Math.min(1, 2000 / Math.max(bitmap.width, bitmap.height))
+    if (scale === 1 && file.size < 3_000_000 && file.type !== 'image/heic') {
+      return { blob: file, name: file.name }
+    }
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.round(bitmap.width * scale)
+    canvas.height = Math.round(bitmap.height * scale)
+    canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, 'image/jpeg', 0.85)
+    )
+    if (!blob) return { blob: file, name: file.name }
+    return { blob, name: file.name.replace(/\.[^.]+$/, '') + '.jpg' }
+  } catch {
+    // The browser cannot decode it: let the server reject or accept it.
+    return { blob: file, name: file.name }
+  }
+}
+
+function applyArticle(index: number) {
+  const article = blResult.value?.articles[index]
+  if (!article) return
+  activeArticle.value = index
+  const values: Record<string, string> = {
+    codeArticle: article.codeArticle ?? '',
+    designation: article.designation ?? '',
+    qteBl: article.quantite === null ? '' : String(article.quantite),
+  }
+  for (const [key, value] of Object.entries(values)) {
+    if (value === '') continue
+    textFields[key] = value
+    fromBl.value.add(key)
+  }
+}
+
+async function readBl(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+
+  reading.value = true
+  blError.value = null
+  try {
+    const { blob, name } = await prepareUpload(file)
+    const body = new FormData()
+    body.append('bon', blob, name)
+    const res = await fetch('/entrees/lecture-bl', {
+      method: 'POST',
+      body,
+      credentials: 'same-origin',
+      headers: { 'Accept': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
+    })
+    const data = await res.json().catch(() => null)
+    if (!res.ok || !data) {
+      blError.value =
+        data?.message ??
+        data?.errors?.[0]?.message ??
+        'La lecture du BL a échoué. Rechargez la page et réessayez.'
+      return
+    }
+
+    const result = data as BlExtraction
+    fromBl.value = new Set()
+    for (const [key, value] of Object.entries(result.fields)) {
+      if (value === null || value.trim() === '' || !(key in textFields)) continue
+      textFields[key] = value.trim()
+      fromBl.value.add(key)
+    }
+    const articles = result.articles.filter((a) => a.codeArticle || a.designation || a.quantite)
+    blResult.value = { filled: 0, articles, remarques: result.remarques }
+    applyArticle(0)
+    blResult.value.filled = fromBl.value.size
+  } catch {
+    blError.value = 'Connexion impossible. Vérifiez le réseau et réessayez.'
+  } finally {
+    reading.value = false
+  }
+}
+
+function clearFromBl(key: string) {
+  if (fromBl.value.has(key)) fromBl.value.delete(key)
+}
 </script>
 
 <template>
@@ -209,6 +325,61 @@ function goBack() {
       </template>
 
       <form class="form-card" novalidate @submit.prevent="submit(false)">
+        <!-- Bon de livraison: pre-fill from a photo or PDF (new entries) -->
+        <section v-if="!isEdit" class="form-section bl-import">
+          <div class="bl-import__head">
+            <div>
+              <h2 class="form-section__title">Bon de livraison</h2>
+              <p class="bl-import__text">
+                Importez une photo ou un PDF du BL : les informations lues remplissent le
+                formulaire. Vérifiez-les avant d'enregistrer.
+              </p>
+            </div>
+            <label class="btn btn--secondary bl-import__button" :aria-disabled="reading">
+              <ScanLine :size="16" />
+              {{
+                reading ? 'Lecture du BL…' : blResult ? 'Importer un autre BL' : 'Importer un BL'
+              }}
+              <input
+                type="file"
+                accept="image/*,application/pdf"
+                class="sr-only"
+                :disabled="reading"
+                @change="readBl"
+              />
+            </label>
+          </div>
+
+          <p v-if="reading" class="bl-import__status" aria-live="polite">
+            Lecture en cours, cela peut prendre quelques secondes…
+          </p>
+          <p v-else-if="blError" class="field__error" role="alert">{{ blError }}</p>
+          <div v-else-if="blResult" class="bl-import__status" aria-live="polite">
+            <p>
+              <strong>{{ blResult.filled }} champ{{ blResult.filled > 1 ? 's' : '' }}</strong>
+              rempli{{ blResult.filled > 1 ? 's' : '' }} depuis le BL (surlignés). Complétez
+              l'entrepôt et la quantité reçue.
+            </p>
+            <p v-if="blResult.remarques" class="bl-import__remark">{{ blResult.remarques }}</p>
+            <div v-if="blResult.articles.length > 1" class="bl-import__articles">
+              <p>Le BL contient {{ blResult.articles.length }} articles. Article utilisé :</p>
+              <div class="bl-import__choices">
+                <button
+                  v-for="(article, index) in blResult.articles"
+                  :key="index"
+                  type="button"
+                  class="btn btn--secondary btn--sm"
+                  :aria-pressed="index === activeArticle"
+                  @click="applyArticle(index)"
+                >
+                  {{ article.codeArticle ?? '' }} {{ article.designation ?? '' }}
+                  <template v-if="article.quantite !== null">— {{ article.quantite }}</template>
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <!-- Réception -->
         <section class="form-section">
           <h2 class="form-section__title">Réception</h2>
@@ -312,7 +483,12 @@ function goBack() {
         <section v-for="section in sections.slice(0, 1)" :key="section.title" class="form-section">
           <h2 class="form-section__title">{{ section.title }}</h2>
           <div class="form-grid">
-            <div v-for="field in section.fields" :key="field.key" class="field">
+            <div
+              v-for="field in section.fields"
+              :key="field.key"
+              class="field"
+              :class="{ 'field--from-bl': fromBl.has(field.key) }"
+            >
               <label class="field__label" :for="field.key">{{ field.label }}</label>
               <input
                 :id="field.key"
@@ -324,6 +500,7 @@ function goBack() {
                 :class="{ mono: field.mono }"
                 :aria-invalid="fieldError(field.key) ? 'true' : 'false'"
                 autocomplete="off"
+                @input="clearFromBl(field.key)"
               />
               <span v-if="fieldError(field.key)" class="field__error">
                 {{ fieldError(field.key) }}
@@ -336,7 +513,7 @@ function goBack() {
         <section class="form-section">
           <h2 class="form-section__title">Quantités</h2>
           <div class="form-grid">
-            <div class="field">
+            <div class="field" :class="{ 'field--from-bl': fromBl.has('qteBl') }">
               <label class="field__label" for="qteBl">Qté BL</label>
               <input
                 id="qteBl"
@@ -347,6 +524,7 @@ function goBack() {
                 inputmode="numeric"
                 class="field__input"
                 :aria-invalid="form.errors.qteBl ? 'true' : 'false'"
+                @input="clearFromBl('qteBl')"
               />
               <span class="field__hint">Quantité indiquée sur le bon de livraison</span>
               <span v-if="form.errors.qteBl" class="field__error">{{ form.errors.qteBl }}</span>
@@ -388,7 +566,12 @@ function goBack() {
         <section v-for="section in sections.slice(1)" :key="section.title" class="form-section">
           <h2 class="form-section__title">{{ section.title }}</h2>
           <div class="form-grid">
-            <div v-for="field in section.fields" :key="field.key" class="field">
+            <div
+              v-for="field in section.fields"
+              :key="field.key"
+              class="field"
+              :class="{ 'field--from-bl': fromBl.has(field.key) }"
+            >
               <label class="field__label" :for="field.key">{{ field.label }}</label>
               <input
                 :id="field.key"
@@ -400,6 +583,7 @@ function goBack() {
                 :class="{ mono: field.mono }"
                 :aria-invalid="fieldError(field.key) ? 'true' : 'false'"
                 autocomplete="off"
+                @input="clearFromBl(field.key)"
               />
               <span v-if="fieldError(field.key)" class="field__error">
                 {{ fieldError(field.key) }}

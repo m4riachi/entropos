@@ -1,7 +1,9 @@
 import Entry from '#models/entry'
 import EntryTransformer from '#transformers/entry_transformer'
 import { entryFormData } from '#services/entry_form_data'
-import { entryListValidator, entryValidator } from '#validators/entry'
+import { blExtractionValidator, entryListValidator, entryValidator } from '#validators/entry'
+import { BlExtractionError, extractBonDeLivraison, type BlMediaType } from '#services/bl_extraction'
+import { readFile } from 'node:fs/promises'
 import {
   ENTREPOTS,
   NUMERO_ORDRE_NUMERIC_SQL,
@@ -139,6 +141,39 @@ export default class EntriesController {
       return response.redirect().withQs(false).toRoute('entries.create')
     }
     return response.redirect(listUrl(session))
+  }
+
+  /**
+   * Reads an uploaded bon de livraison with Claude and returns the values
+   * found as JSON; the form fills itself from them (nothing is saved).
+   */
+  async readBl({ request, response }: HttpContext) {
+    const { bon } = await request.validateUsing(blExtractionValidator)
+    const extname = (bon.extname ?? '').toLowerCase()
+    const mediaType: BlMediaType =
+      extname === 'pdf'
+        ? 'application/pdf'
+        : extname === 'png'
+          ? 'image/png'
+          : extname === 'webp'
+            ? 'image/webp'
+            : extname === 'gif'
+              ? 'image/gif'
+              : 'image/jpeg'
+
+    const { suggestions, designationsByCode } = await entryFormData()
+    try {
+      const result = await extractBonDeLivraison(
+        { data: await readFile(bon.tmpPath!), mediaType },
+        { fournisseurs: suggestions.fournisseur, articles: designationsByCode }
+      )
+      return response.ok(result)
+    } catch (error) {
+      if (error instanceof BlExtractionError) {
+        return response.status(error.status).send({ message: error.message })
+      }
+      throw error
+    }
   }
 
   async edit({ params, inertia, session }: HttpContext) {

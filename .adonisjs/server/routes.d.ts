@@ -10,6 +10,7 @@ export type ScannedRoutes = {
     'entries.index': { paramsTuple?: []; params?: {} }
     'entries.create': { paramsTuple?: []; params?: {} }
     'entries.store': { paramsTuple?: []; params?: {} }
+    'entries.readBl': { paramsTuple?: []; params?: {} }
     'entries.edit': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'entries.update': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'entries.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -44,6 +45,7 @@ export type ScannedRoutes = {
   POST: {
     'session.store': { paramsTuple?: []; params?: {} }
     'entries.store': { paramsTuple?: []; params?: {} }
+    'entries.readBl': { paramsTuple?: []; params?: {} }
     'session.destroy': { paramsTuple?: []; params?: {} }
   }
   PUT: {

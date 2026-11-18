@@ -1267,3 +1267,58 @@ th.table__actions {
   white-space: nowrap;
   border: 0;
 }
+
+/* Bon de livraison import (new entry form) */
+.bl-import__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 24px;
+}
+.bl-import__head .form-section__title {
+  margin-bottom: 6px;
+}
+.bl-import__text {
+  color: var(--muted);
+  font-size: 14px;
+  max-width: 60ch;
+}
+.bl-import__button {
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.bl-import__button[aria-disabled='true'] {
+  opacity: 0.6;
+  cursor: progress;
+}
+.bl-import__button:focus-within {
+  box-shadow: 0 0 0 3px var(--ring);
+}
+.bl-import__status {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: var(--r);
+  background: var(--accent-bg);
+  font-size: 14px;
+  display: grid;
+  gap: 8px;
+}
+.bl-import__remark {
+  color: var(--muted);
+}
+.bl-import__choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+.bl-import__choices .btn[aria-pressed='true'] {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+.field--from-bl .field__input {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}

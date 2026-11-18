@@ -86,6 +86,19 @@ export interface Registry {
       rawResponse: ExtractRawResponse<Awaited<ReturnType<import('#controllers/entries_controller').default['store']>>> | { status: 422; response: { errors: SimpleError[] } }
     }
   }
+  'entries.readBl': {
+    methods: ["POST"]
+    pattern: '/entrees/lecture-bl'
+    types: {
+      body: ExtractBody<InferInput<(typeof import('#validators/entry').blExtractionValidator)>>
+      paramsTuple: []
+      params: {}
+      query: ExtractQuery<InferInput<(typeof import('#validators/entry').blExtractionValidator)>>
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/entries_controller').default['readBl']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/entries_controller').default['readBl']>>> | { status: 422; response: { errors: SimpleError[] } }
+      rawResponse: ExtractRawResponse<Awaited<ReturnType<import('#controllers/entries_controller').default['readBl']>>> | { status: 422; response: { errors: SimpleError[] } }
+    }
+  }
   'entries.edit': {
     methods: ["GET","HEAD"]
     pattern: '/entrees/:id/modifier'
