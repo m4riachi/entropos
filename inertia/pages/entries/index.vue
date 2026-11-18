@@ -407,7 +407,7 @@ function openEdit(entry: Data.Entry) {
     <ExportDialog
       ref="stockRef"
       title="Situation du stock"
-      description="Quantités reçues par article et par entrepôt, jusqu'à la date choisie."
+      description="Quantités reçues par article et par entrepôt, plus une feuille avec le total de chaque article tous entrepôts confondus, jusqu'à la date choisie."
       date-label="Situation au"
       url="/exports/situation-stock"
     />

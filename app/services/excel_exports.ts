@@ -224,7 +224,157 @@ export async function buildStockWorkbook(asOf: DateTime) {
 
   ws.pageSetup.printArea = `A1:G${top + 7}`
 
+  addTotalsByArticleSheet(workbook, lines, asOf)
+
   return workbook
+}
+
+/**
+ * Second sheet of the stock export: one row per article with its quantity
+ * in each entrepôt and the grand total across all of them. Articles are
+ * matched by code, or by designation when they have no code.
+ */
+function addTotalsByArticleSheet(
+  workbook: ExcelJS.Workbook,
+  lines: Map<number, StockLine[]>,
+  asOf: DateTime
+) {
+  type Article = { code: string | null; designation: string | null; qty: Map<number, number> }
+  const articles = new Map<string, Article>()
+  const normalised = (designation: string | null) => (designation ?? '').trim().toUpperCase()
+  /**
+   * Coded lines first, so a line typed without a code joins the coded
+   * article with the same designation (e.g. "LIT DE CAMPS" with and
+   * without 100123) instead of becoming a separate row.
+   */
+  const byDesignation = new Map<string, string>()
+  const all = [...lines].flatMap(([entrepot, items]) => items.map((item) => ({ entrepot, item })))
+  all.sort((a, b) => Number(!a.item.code) - Number(!b.item.code))
+  for (const { entrepot, item } of all) {
+    const name = normalised(item.designation)
+    const key = item.code ?? byDesignation.get(name) ?? `designation:${name}`
+    let article = articles.get(key)
+    if (!article) {
+      article = { code: item.code, designation: item.designation, qty: new Map() }
+      articles.set(key, article)
+      if (name && !byDesignation.has(name)) byDesignation.set(name, key)
+    }
+    article.designation ??= item.designation
+    article.qty.set(entrepot, (article.qty.get(entrepot) ?? 0) + item.total)
+  }
+  const rows = [...articles.values()].sort((a, b) => {
+    if (a.code && b.code) return a.code.localeCompare(b.code, 'fr', { numeric: true })
+    if (a.code || b.code) return a.code ? -1 : 1
+    return (a.designation ?? '').localeCompare(b.designation ?? '', 'fr')
+  })
+
+  const ws = workbook.addWorksheet('TOTAL PAR ARTICLE', {
+    views: [{ state: 'frozen', ySplit: 4, showGridLines: false }],
+    pageSetup: {
+      orientation: 'landscape',
+      paperSize: 9,
+      fitToPage: true,
+      fitToWidth: 1,
+      fitToHeight: 0,
+    },
+  })
+  ws.columns = [
+    { width: 14 },
+    { width: 34 },
+    ...ENTREPOTS.map(() => ({ width: 14 })),
+    { width: 18 },
+  ]
+
+  const font = (size = 11, bold = false, color?: string): Partial<ExcelJS.Font> => ({
+    name: 'Calibri',
+    size,
+    bold,
+    ...(color ? { color: { argb: color } } : {}),
+  })
+  // Zeros show as a dash so the article's warehouses stand out.
+  const qtyFormat = '#,##0;-#,##0;"–"'
+
+  ws.getCell('A1').value = 'SITUATION DU STOCK — TOTAL PAR ARTICLE'
+  ws.getCell('A1').font = font(16, true)
+  ws.getRow(1).height = 21
+  ws.getCell('A2').value = 'Situation au :'
+  ws.getCell('A2').font = font(10)
+  ws.getCell('B2').value = excelDate(asOf)
+  ws.getCell('B2').numFmt = 'dd/mm/yyyy'
+  ws.getCell('B2').font = font(10, true)
+  ws.getCell('B2').alignment = { horizontal: 'left' }
+
+  const headerRow = 4
+  const headers = [
+    'Code Article',
+    'Désignation',
+    ...ENTREPOTS.map((e) => `Entrepôt ${e}`),
+    'Quantité totale',
+  ]
+  const totalCol = headers.length
+  headers.forEach((label, i) => {
+    const cell = ws.getCell(headerRow, i + 1)
+    cell.value = label
+    cell.font = font(11, true, WHITE)
+    cell.fill = fill(NAVY)
+    cell.border = allThin
+    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
+  })
+  ws.getRow(headerRow).height = 30
+
+  const firstData = headerRow + 1
+  rows.forEach((article, index) => {
+    const r = firstData + index
+    const code = ws.getCell(r, 1)
+    code.value = codeValue(article.code)
+    code.alignment = { horizontal: 'center' }
+    ws.getCell(r, 2).value = article.designation
+    ENTREPOTS.forEach((e, i) => {
+      const cell = ws.getCell(r, 3 + i)
+      cell.value = article.qty.get(e) ?? 0
+      cell.numFmt = qtyFormat
+      cell.alignment = { horizontal: 'center' }
+    })
+    const first = ws.getColumn(3).letter
+    const lastQty = ws.getColumn(totalCol - 1).letter
+    const total = ws.getCell(r, totalCol)
+    total.value = {
+      formula: `SUM(${first}${r}:${lastQty}${r})`,
+      result: [...article.qty.values()].reduce((acc, n) => acc + n, 0),
+    }
+    total.numFmt = '#,##0'
+    total.font = font(11, true)
+    total.fill = fill(PALE_BLUE)
+    total.alignment = { horizontal: 'center' }
+    for (let c = 1; c <= totalCol; c++) ws.getCell(r, c).border = allThin
+  })
+
+  const totalRow = firstData + rows.length
+  ws.getCell(totalRow, 1).value = 'TOTAL'
+  for (let c = 1; c <= totalCol; c++) {
+    const cell = ws.getCell(totalRow, c)
+    cell.fill = fill(PALE_BLUE)
+    cell.font = font(12, true)
+    cell.border = allThin
+    if (c < 3) continue
+    const letter = ws.getColumn(c).letter
+    const result = rows.reduce(
+      (acc, a) =>
+        acc +
+        (c === totalCol
+          ? [...a.qty.values()].reduce((s, n) => s + n, 0)
+          : (a.qty.get(ENTREPOTS[c - 3]) ?? 0)),
+      0
+    )
+    cell.value = rows.length
+      ? { formula: `SUM(${letter}${firstData}:${letter}${totalRow - 1})`, result }
+      : 0
+    cell.numFmt = '#,##0'
+    cell.alignment = { horizontal: 'center' }
+  }
+  ws.getRow(totalRow).height = 18
+
+  ws.pageSetup.printArea = `A1:${ws.getColumn(totalCol).letter}${totalRow}`
 }
 
 /**
